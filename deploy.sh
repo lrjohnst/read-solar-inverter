@@ -62,13 +62,15 @@ initial_setup() {
 update_deployment() {
     print_status "Starting deployment update..."
 
-    # Create temporary directory for new code
-    DEPLOY_DIR="/tmp/solar-deploy-$(date +%s)"
-
-    # Clone the repository
-    print_status "Downloading latest code..."
-    git clone --depth 1 "$REPO_URL" "$DEPLOY_DIR"
-    cd "$DEPLOY_DIR"
+    # Use the current repository directory if it exists and is a git repo
+    if [ -d ".git" ]; then
+        print_status "Updating from current repository..."
+        git pull origin main
+        DEPLOY_DIR="$(pwd)"
+    else
+        print_error "Not in a git repository. Please run this script from your cloned repository directory."
+        exit 1
+    fi
 
     # Stop the service during deployment
     print_status "Stopping service..."
@@ -120,9 +122,7 @@ update_deployment() {
         print_warning "Test collection failed, but deployment completed"
     fi
 
-    # Cleanup
-    print_status "Cleaning up..."
-    rm -rf "$DEPLOY_DIR"
+    # No cleanup needed since we're using the current directory
 
     print_success "Deployment completed successfully!"
 
