@@ -267,10 +267,50 @@ For fully automated deployments, you can set up GitHub Actions:
 
 Once data is being collected, you can analyze it using SQL queries:
 
-### Basic Statistics
+### Energy Production Over Time Periods
 
 ```sql
--- Daily energy production
+-- Last day
+SELECT
+    DATE(timestamp) as date,
+    MAX(e_today) as energy_kwh
+FROM inverter_data
+WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+GROUP BY DATE(timestamp);
+
+-- Last week
+SELECT
+    DATE(timestamp) as date,
+    MAX(e_today) as daily_energy_kwh
+FROM inverter_data
+WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+GROUP BY DATE(timestamp)
+ORDER BY date;
+
+-- Custom date range (e.g., Sep 24 11:00 to Sep 26 18:00)
+SELECT
+    DATE(timestamp) as date,
+    MAX(e_today) as daily_energy_kwh
+FROM inverter_data
+WHERE timestamp BETWEEN '2025-09-24 11:00:00' AND '2025-09-26 18:00:00'
+GROUP BY DATE(timestamp)
+ORDER BY date;
+
+-- Total energy for custom period
+SELECT
+    SUM(daily_energy) as total_period_kwh
+FROM (
+    SELECT DATE(timestamp) as date, MAX(e_today) as daily_energy
+    FROM inverter_data
+    WHERE timestamp BETWEEN '2025-09-24 11:00:00' AND '2025-09-26 18:00:00'
+    GROUP BY DATE(timestamp)
+) as daily_totals;
+```
+
+### Power and Performance Analysis
+
+```sql
+-- Daily energy production with peak power and temperature
 SELECT DATE(timestamp) as date,
        MAX(e_today) as daily_energy_kwh,
        MAX(p_ac) as peak_power_w,
@@ -280,7 +320,7 @@ WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)
 GROUP BY DATE(timestamp)
 ORDER BY date DESC;
 
--- Hourly power averages
+-- Hourly power averages (useful for daily production curves)
 SELECT DATE(timestamp) as date,
        HOUR(timestamp) as hour,
        AVG(p_ac) as avg_power_w,
