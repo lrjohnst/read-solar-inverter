@@ -1,24 +1,26 @@
-# Solar Inverter Data Collector
+# Solar Inverter + P1 Meter Data Collector
 
-A Python-based system for collecting real-time data from solar inverters and storing it in a MySQL database. This system runs entirely in user space and automatically collects data every minute, creating a comprehensive time-series dataset of your solar inverter's performance.
+A Python-based system for collecting real-time data from solar inverters and P1 smart meters, storing it in a MySQL database. This system runs entirely in user space and automatically collects data every minute, creating comprehensive time-series datasets of your energy production and consumption.
 
 ## Features
 
-- **Real-time Data Collection**: Fetches XML data from your solar inverter every minute
-- **MySQL Storage**: Stores all data in a structured MySQL database for analysis
+- **Dual Data Collection**: Fetches data from both solar inverters (XML) and P1 smart meters (JSON) every minute
+- **Complete Energy Overview**: Track solar production, grid consumption, and export in one system
+- **MySQL Storage**: Stores all data in structured MySQL databases optimized for time-series analysis
 - **User-Space Installation**: Runs as your user, no root privileges required for operation
 - **Systemd User Services**: Automatic data collection via systemd user timer
 - **Easy Configuration**: Environment-based configuration with `.env` file
 - **Simple Deployment**: Git-based deployment with automatic updates
 - **Monitoring Tools**: Built-in status monitoring and statistics
 - **Error Handling**: Robust error handling with detailed logging
+- **Phase-Level Analytics**: Track individual L1/L2/L3 power flows for three-phase systems
 
 ## System Requirements
 
 - Linux server (Raspberry Pi OS, Ubuntu 18.04+ recommended)
 - Python 3.6+
 - MySQL 5.7+ or MariaDB 10.3+ (can be remote)
-- Network access to your solar inverter
+- Network access to your solar inverter and P1 smart meter
 - Git for deployment updates
 
 ## Quick Start
@@ -65,6 +67,7 @@ nano ~/solar-inverter/.env
 Update these settings for your setup:
 ```env
 SOLAR_XML_ENDPOINT=http://192.168.2.21/real_time_data.xml  # Your inverter IP
+P1_ENDPOINT=http://192.168.2.26/api/v1/data              # Your P1 meter API (optional)
 DB_HOST=your-mysql-server.com  # Your remote MySQL server
 DB_USER=solar_user
 DB_PASSWORD=your_password
@@ -107,6 +110,7 @@ The system uses environment variables for configuration. These are stored in `~/
 
 ```bash
 SOLAR_XML_ENDPOINT=http://192.168.2.21/real_time_data.xml  # Your inverter endpoint
+P1_ENDPOINT=http://192.168.2.26/api/v1/data              # Your P1 meter endpoint (optional)
 DB_HOST=your-mysql-server.com  # Your remote MySQL server
 DB_USER=solar_user
 DB_PASSWORD=your_password
@@ -129,7 +133,7 @@ Changes take effect on the next data collection cycle (within a minute) or resta
 systemctl --user restart solar-inverter-collector.timer
 ```
 
-### Finding Your Inverter Endpoint
+### Finding Your Endpoints
 
 Test if you can reach your inverter:
 
@@ -137,13 +141,23 @@ Test if you can reach your inverter:
 curl http://192.168.2.21/real_time_data.xml
 ```
 
-This should return XML data similar to your inverter's real-time information.
+This should return XML data with your inverter's real-time information.
+
+Test if you can reach your P1 meter (optional):
+
+```bash
+curl http://192.168.2.26/api/v1/data
+```
+
+This should return JSON data with your smart meter's real-time information.
 
 ## Database Schema
 
-The system creates two main tables:
+The system creates several tables for comprehensive energy monitoring:
 
-### `inverter_data`
+### Solar Inverter Tables
+
+#### `inverter_data`
 Stores the actual solar inverter readings:
 - Timestamp and state information
 - AC/DC voltage and current readings
@@ -152,8 +166,26 @@ Stores the actual solar inverter readings:
 - Temperature readings
 - PV string voltages and currents
 
-### `collection_logs`
-Tracks the data collection process:
+### P1 Smart Meter Tables
+
+#### `p1_devices`
+Stores P1 meter device information (one-time registration):
+- Device unique ID, model, SMR version
+- WiFi network information
+- Creation/update timestamps
+
+#### `p1_meter_data`
+Stores P1 meter readings (time-series data):
+- Power consumption/export (total and per phase)
+- Energy totals (import/export, T1/T2 tariffs)
+- Voltage and current measurements per phase
+- Grid quality metrics (voltage sags, power failures)
+- WiFi signal strength and active tariff
+
+### System Tables
+
+#### `collection_logs`
+Tracks the data collection process for both systems:
 - Collection timestamps
 - Success/error status
 - Error messages
@@ -267,7 +299,7 @@ For fully automated deployments, you can set up GitHub Actions:
 
 Once data is being collected, you can analyze it using SQL queries:
 
-### Energy Production Over Time Periods
+### Solar Energy Production Over Time Periods
 
 ```sql
 -- Last day
@@ -332,6 +364,136 @@ GROUP BY DATE(timestamp), HOUR(timestamp)
 ORDER BY date DESC, hour;
 ```
 
+### P1 Smart Meter Energy Analysis
+
+#### Grid Consumption and Export Over Time
+
+```sql
+-- Last 24 hours consumption/export
+SELECT
+    MIN(total_power_import_kwh) as start_import,
+    MAX(total_power_import_kwh) as end_import,
+    (MAX(total_power_import_kwh) - MIN(total_power_import_kwh)) as consumed_kwh,
+    MIN(total_power_export_kwh) as start_export,
+    MAX(total_power_export_kwh) as end_export,
+    (MAX(total_power_export_kwh) - MIN(total_power_export_kwh)) as exported_kwh
+FROM p1_meter_data
+WHERE timestamp >= NOW() - INTERVAL 24 HOUR;
+
+-- Daily breakdown for last week
+SELECT
+    DATE(timestamp) as day,
+    (MAX(total_power_import_kwh) - MIN(total_power_import_kwh)) as daily_consumed_kwh,
+    (MAX(total_power_export_kwh) - MIN(total_power_export_kwh)) as daily_exported_kwh,
+    (MAX(total_power_import_t1_kwh) - MIN(total_power_import_t1_kwh)) as consumed_t1_kwh,
+    (MAX(total_power_import_t2_kwh) - MIN(total_power_import_t2_kwh)) as consumed_t2_kwh
+FROM p1_meter_data
+WHERE timestamp >= NOW() - INTERVAL 7 DAY
+GROUP BY DATE(timestamp)
+ORDER BY day;
+
+-- Specific date range (e.g., Sep 24 to Sep 26)
+SELECT
+    (MAX(total_power_import_kwh) - MIN(total_power_import_kwh)) as period_consumed_kwh,
+    (MAX(total_power_export_kwh) - MIN(total_power_export_kwh)) as period_exported_kwh
+FROM p1_meter_data
+WHERE DATE(timestamp) BETWEEN '2025-09-24' AND '2025-09-26';
+```
+
+#### Phase-Level Power Analysis
+
+```sql
+-- Current power flow per phase (most recent reading)
+SELECT
+    timestamp,
+    active_power_w as total_power,
+    active_power_l1_w as l1_power,
+    active_power_l2_w as l2_power,
+    active_power_l3_w as l3_power,
+    active_voltage_l1_v as l1_voltage,
+    active_voltage_l2_v as l2_voltage,
+    active_voltage_l3_v as l3_voltage
+FROM p1_meter_data
+ORDER BY timestamp DESC
+LIMIT 1;
+
+-- Daily phase imbalance analysis
+SELECT
+    DATE(timestamp) as day,
+    AVG(ABS(active_power_l1_w)) as avg_l1_power,
+    AVG(ABS(active_power_l2_w)) as avg_l2_power,
+    AVG(ABS(active_power_l3_w)) as avg_l3_power,
+    AVG(active_voltage_l1_v) as avg_l1_voltage,
+    AVG(active_voltage_l2_v) as avg_l2_voltage,
+    AVG(active_voltage_l3_v) as avg_l3_voltage
+FROM p1_meter_data
+WHERE timestamp >= NOW() - INTERVAL 7 DAY
+GROUP BY DATE(timestamp)
+ORDER BY day;
+```
+
+#### Tariff Analysis (T1 vs T2)
+
+```sql
+-- Daily tariff consumption breakdown
+SELECT
+    DATE(timestamp) as day,
+    (MAX(total_power_import_t1_kwh) - MIN(total_power_import_t1_kwh)) as t1_consumed_kwh,
+    (MAX(total_power_import_t2_kwh) - MIN(total_power_import_t2_kwh)) as t2_consumed_kwh,
+    (MAX(total_power_export_t1_kwh) - MIN(total_power_export_t1_kwh)) as t1_exported_kwh,
+    (MAX(total_power_export_t2_kwh) - MIN(total_power_export_t2_kwh)) as t2_exported_kwh
+FROM p1_meter_data
+WHERE timestamp >= NOW() - INTERVAL 30 DAY
+GROUP BY DATE(timestamp)
+ORDER BY day DESC;
+
+-- Hourly tariff usage (to understand T1/T2 patterns)
+SELECT
+    HOUR(timestamp) as hour,
+    AVG(CASE WHEN active_tariff = 1 THEN ABS(active_power_w) END) as avg_t1_power,
+    AVG(CASE WHEN active_tariff = 2 THEN ABS(active_power_w) END) as avg_t2_power,
+    COUNT(CASE WHEN active_tariff = 1 THEN 1 END) as t1_readings,
+    COUNT(CASE WHEN active_tariff = 2 THEN 1 END) as t2_readings
+FROM p1_meter_data
+WHERE timestamp >= NOW() - INTERVAL 7 DAY
+GROUP BY HOUR(timestamp)
+ORDER BY hour;
+```
+
+### Combined Solar + P1 Analysis
+
+```sql
+-- Daily energy balance: Solar production vs Grid consumption
+SELECT
+    DATE(s.timestamp) as day,
+    MAX(s.e_today) as solar_produced_kwh,
+    (MAX(p.total_power_import_kwh) - MIN(p.total_power_import_kwh)) as grid_consumed_kwh,
+    (MAX(p.total_power_export_kwh) - MIN(p.total_power_export_kwh)) as grid_exported_kwh,
+    (MAX(s.e_today) - (MAX(p.total_power_import_kwh) - MIN(p.total_power_import_kwh)) + (MAX(p.total_power_export_kwh) - MIN(p.total_power_export_kwh))) as net_energy_balance_kwh
+FROM inverter_data s
+LEFT JOIN p1_meter_data p ON DATE(s.timestamp) = DATE(p.timestamp)
+WHERE s.timestamp >= NOW() - INTERVAL 7 DAY
+GROUP BY DATE(s.timestamp)
+ORDER BY day DESC;
+
+-- Real-time power flows (most recent readings)
+SELECT
+    'Solar Production' as source,
+    s.p_ac as power_w,
+    s.timestamp
+FROM inverter_data s
+ORDER BY s.timestamp DESC LIMIT 1
+
+UNION ALL
+
+SELECT
+    'Grid Power' as source,
+    p.active_power_w as power_w,
+    p.timestamp
+FROM p1_meter_data p
+ORDER BY p.timestamp DESC LIMIT 1;
+```
+
 ### Performance Monitoring
 
 ```sql
@@ -361,10 +523,11 @@ ORDER BY date DESC;
    - Verify credentials in `~/solar-inverter/.env` file
    - Test connection manually: `~/solar-inverter/venv/bin/python ~/solar-inverter/collect_solar_data.py`
 
-3. **XML endpoint not accessible**:
-   - Verify network connectivity to inverter
-   - Check inverter IP address in `~/solar-inverter/.env`
+3. **XML/JSON endpoint not accessible**:
+   - Verify network connectivity to inverter/P1 meter
+   - Check IP addresses in `~/solar-inverter/.env`
    - Test with curl: `curl http://192.168.2.21/real_time_data.xml`
+   - Test P1 meter: `curl http://192.168.2.26/api/v1/data`
 
 4. **Configuration not loading**:
    - Ensure `.env` file exists: `ls -la ~/solar-inverter/.env`
