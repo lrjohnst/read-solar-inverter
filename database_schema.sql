@@ -58,3 +58,53 @@ CREATE TABLE collection_logs (
     INDEX idx_timestamp (timestamp),
     INDEX idx_status (status)
 );
+
+CREATE TABLE p1_devices (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    unique_id VARCHAR(100) UNIQUE NOT NULL,
+    meter_model VARCHAR(100),
+    smr_version TINYINT UNSIGNED,
+    wifi_ssid VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_unique_id (unique_id)
+);
+
+CREATE TABLE p1_meter_data (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    device_id INT NOT NULL,
+    timestamp DATETIME NOT NULL,
+    wifi_strength TINYINT UNSIGNED,
+    active_tariff TINYINT UNSIGNED,
+    total_power_import_kwh DECIMAL(10,3),
+    total_power_import_t1_kwh DECIMAL(10,3),
+    total_power_import_t2_kwh DECIMAL(10,3),
+    total_power_export_kwh DECIMAL(10,3),
+    total_power_export_t1_kwh DECIMAL(10,3),
+    total_power_export_t2_kwh DECIMAL(10,3),
+    active_power_w DECIMAL(8,3),
+    active_power_l1_w DECIMAL(8,3),
+    active_power_l2_w DECIMAL(8,3),
+    active_power_l3_w DECIMAL(8,3),
+    active_voltage_l1_v DECIMAL(5,1),
+    active_voltage_l2_v DECIMAL(5,1),
+    active_voltage_l3_v DECIMAL(5,1),
+    active_current_a DECIMAL(6,3),
+    active_current_l1_a DECIMAL(6,3),
+    active_current_l2_a DECIMAL(6,3),
+    active_current_l3_a DECIMAL(6,3),
+    voltage_sag_l1_count INT UNSIGNED DEFAULT 0,
+    voltage_sag_l2_count INT UNSIGNED DEFAULT 0,
+    voltage_sag_l3_count INT UNSIGNED DEFAULT 0,
+    voltage_swell_l1_count INT UNSIGNED DEFAULT 0,
+    voltage_swell_l2_count INT UNSIGNED DEFAULT 0,
+    voltage_swell_l3_count INT UNSIGNED DEFAULT 0,
+    any_power_fail_count INT UNSIGNED DEFAULT 0,
+    long_power_fail_count INT UNSIGNED DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (device_id) REFERENCES p1_devices(id),
+    INDEX idx_device_timestamp (device_id, timestamp),
+    INDEX idx_timestamp (timestamp),
+    INDEX idx_active_tariff (active_tariff),
+    INDEX idx_created_at (created_at)
+);
