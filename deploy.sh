@@ -7,9 +7,9 @@ set -e
 
 # Configuration
 REPO_URL="https://github.com/your-username/read-solar-inverter.git"
-APP_DIR="/opt/solar-inverter"
+APP_DIR="$HOME/solar-inverter"
 SERVICE_NAME="solar-inverter-collector"
-SERVICE_USER="solar"
+SERVICE_USER="$USER"
 
 # Colors for output
 RED='\033[0;31m'
@@ -34,9 +34,9 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        print_error "This script must be run as root (use sudo)"
+check_requirements() {
+    if [[ -z "$USER" || -z "$HOME" ]]; then
+        print_error "USER and HOME environment variables must be set"
         exit 1
     fi
 }
@@ -72,7 +72,7 @@ update_deployment() {
 
     # Stop the service during deployment
     print_status "Stopping service..."
-    systemctl stop ${SERVICE_NAME}.timer || true
+    systemctl --user stop ${SERVICE_NAME}.timer || true
 
     # Backup current installation
     if [ -d "$APP_DIR" ]; then
@@ -92,32 +92,29 @@ update_deployment() {
 
     # Update Python dependencies
     print_status "Updating Python dependencies..."
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
-
-    # Set proper ownership
-    chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
+    "$APP_DIR/venv/bin/pip" install --upgrade pip
+    "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
     # Reload systemd and start service
     print_status "Starting service..."
-    systemctl daemon-reload
-    systemctl start ${SERVICE_NAME}.timer
+    systemctl --user daemon-reload
+    systemctl --user start ${SERVICE_NAME}.timer
 
     # Verify deployment
     print_status "Verifying deployment..."
     sleep 5
 
-    if systemctl is-active --quiet ${SERVICE_NAME}.timer; then
+    if systemctl --user is-active --quiet ${SERVICE_NAME}.timer; then
         print_success "Service is running"
     else
         print_error "Service failed to start"
-        systemctl status ${SERVICE_NAME}.timer --no-pager -l
+        systemctl --user status ${SERVICE_NAME}.timer --no-pager -l
         exit 1
     fi
 
     # Test data collection
     print_status "Testing data collection..."
-    if timeout 30 sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/python" "$APP_DIR/collect_solar_data.py"; then
+    if timeout 30 "$APP_DIR/venv/bin/python" "$APP_DIR/collect_solar_data.py"; then
         print_success "Test collection successful"
     else
         print_warning "Test collection failed, but deployment completed"
@@ -131,7 +128,7 @@ update_deployment() {
 
     # Show status
     print_status "Service status:"
-    systemctl status ${SERVICE_NAME}.timer --no-pager -l
+    systemctl --user status ${SERVICE_NAME}.timer --no-pager -l
 }
 
 rollback() {
@@ -148,7 +145,7 @@ rollback() {
     print_status "Rolling back to: $LATEST_BACKUP"
 
     # Stop service
-    systemctl stop ${SERVICE_NAME}.timer || true
+    systemctl --user stop ${SERVICE_NAME}.timer || true
 
     # Backup current (failed) version
     mv "$APP_DIR" "${APP_DIR}.failed.$(date +%Y%m%d_%H%M%S)"
@@ -157,10 +154,10 @@ rollback() {
     mv "$LATEST_BACKUP" "$APP_DIR"
 
     # Start service
-    systemctl start ${SERVICE_NAME}.timer
+    systemctl --user start ${SERVICE_NAME}.timer
 
     print_success "Rollback completed"
-    systemctl status ${SERVICE_NAME}.timer --no-pager -l
+    systemctl --user status ${SERVICE_NAME}.timer --no-pager -l
 }
 
 show_help() {
@@ -174,21 +171,21 @@ show_help() {
     echo "  rollback    Rollback to previous version"
     echo "  help        Show this help message"
     echo ""
-    echo "Note: This script must be run as root (use sudo)"
+    echo "Note: This script runs as the current user"
 }
 
 # Main execution
 case "${1:-update}" in
     setup)
-        check_root
+        check_requirements
         initial_setup
         ;;
     update)
-        check_root
+        check_requirements
         update_deployment
         ;;
     rollback)
-        check_root
+        check_requirements
         rollback
         ;;
     help)

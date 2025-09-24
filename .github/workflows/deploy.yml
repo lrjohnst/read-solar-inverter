@@ -26,7 +26,7 @@ jobs:
           # Configuration
           REPO_URL="${{ github.server_url }}/${{ github.repository }}"
           DEPLOY_DIR="/tmp/solar-deploy-$(date +%s)"
-          APP_DIR="/opt/solar-inverter"
+          APP_DIR="$HOME/solar-inverter"
           SERVICE_NAME="solar-inverter-collector"
 
           echo "🚀 Starting deployment..."
@@ -38,45 +38,42 @@ jobs:
 
           # Stop the service during deployment
           echo "⏸️ Stopping service..."
-          sudo systemctl stop ${SERVICE_NAME}.timer || true
+          systemctl --user stop ${SERVICE_NAME}.timer || true
 
           # Backup current installation if it exists
           if [ -d "$APP_DIR" ]; then
             echo "💾 Creating backup..."
-            sudo cp -r "$APP_DIR" "${APP_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
+            cp -r "$APP_DIR" "${APP_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
           fi
 
           # Update application files (preserve config and logs)
           echo "📂 Updating application files..."
-          sudo mkdir -p "$APP_DIR"
+          mkdir -p "$APP_DIR"
 
           # Copy new files
-          sudo cp collect_solar_data.py "$APP_DIR/"
-          sudo cp setup_database.py "$APP_DIR/"
-          sudo cp requirements.txt "$APP_DIR/"
-          sudo cp monitor.sh "$APP_DIR/"
-          sudo chmod +x "$APP_DIR"/*.py "$APP_DIR"/*.sh
+          cp collect_solar_data.py "$APP_DIR/"
+          cp setup_database.py "$APP_DIR/"
+          cp requirements.txt "$APP_DIR/"
+          cp monitor.sh "$APP_DIR/"
+          chmod +x "$APP_DIR"/*.py "$APP_DIR"/*.sh
 
           # Update Python dependencies
           echo "🐍 Updating Python dependencies..."
-          sudo -u solar "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
-
-          # Set proper ownership
-          sudo chown -R solar:solar "$APP_DIR"
+          "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
           # Start the service
           echo "▶️ Starting service..."
-          sudo systemctl daemon-reload
-          sudo systemctl start ${SERVICE_NAME}.timer
+          systemctl --user daemon-reload
+          systemctl --user start ${SERVICE_NAME}.timer
 
           # Verify deployment
           echo "✅ Verifying deployment..."
           sleep 5
-          sudo systemctl status ${SERVICE_NAME}.timer --no-pager -l
+          systemctl --user status ${SERVICE_NAME}.timer --no-pager -l
 
           # Test data collection
           echo "🧪 Testing data collection..."
-          if sudo -u solar timeout 30 "$APP_DIR/venv/bin/python" "$APP_DIR/collect_solar_data.py"; then
+          if timeout 30 "$APP_DIR/venv/bin/python" "$APP_DIR/collect_solar_data.py"; then
             echo "✅ Test collection successful"
           else
             echo "❌ Test collection failed"
@@ -89,4 +86,4 @@ jobs:
 
           echo "🎉 Deployment completed successfully!"
           echo "📊 Service status:"
-          sudo systemctl status ${SERVICE_NAME}.timer --no-pager -l
+          systemctl --user status ${SERVICE_NAME}.timer --no-pager -l

@@ -4,8 +4,8 @@
 # This script provides monitoring and management commands
 
 APP_NAME="solar-inverter-collector"
-SERVICE_USER="solar"
-APP_DIR="/opt/solar-inverter"
+SERVICE_USER="$USER"
+APP_DIR="$HOME/solar-inverter"
 
 # Colors for output
 RED='\033[0;31m'
@@ -32,44 +32,44 @@ print_error() {
 
 show_status() {
     print_status "Service Status:"
-    systemctl status ${APP_NAME}.timer --no-pager -l
+    systemctl --user status ${APP_NAME}.timer --no-pager -l
     echo ""
-    systemctl status ${APP_NAME}.service --no-pager -l
+    systemctl --user status ${APP_NAME}.service --no-pager -l
 }
 
 show_logs() {
     print_status "Recent logs (last 50 lines):"
-    journalctl -u ${APP_NAME}.service -n 50 --no-pager
+    journalctl --user -u ${APP_NAME}.service -n 50 --no-pager
 }
 
 follow_logs() {
     print_status "Following logs (Ctrl+C to exit):"
-    journalctl -u ${APP_NAME}.service -f
+    journalctl --user -u ${APP_NAME}.service -f
 }
 
 test_connection() {
     print_status "Testing database connection and XML endpoint..."
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/python" "$APP_DIR/collect_solar_data.py"
+    "$APP_DIR/venv/bin/python" "$APP_DIR/collect_solar_data.py"
 }
 
 start_service() {
     print_status "Starting service..."
-    systemctl start ${APP_NAME}.timer
+    systemctl --user start ${APP_NAME}.timer
     print_success "Service started"
     show_status
 }
 
 stop_service() {
     print_status "Stopping service..."
-    systemctl stop ${APP_NAME}.timer
+    systemctl --user stop ${APP_NAME}.timer
     print_success "Service stopped"
     show_status
 }
 
 restart_service() {
     print_status "Restarting service..."
-    systemctl stop ${APP_NAME}.timer
-    systemctl start ${APP_NAME}.timer
+    systemctl --user stop ${APP_NAME}.timer
+    systemctl --user start ${APP_NAME}.timer
     print_success "Service restarted"
     show_status
 }
