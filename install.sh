@@ -52,10 +52,10 @@ install_dependencies() {
         if [[ $EUID -ne 0 ]]; then
             print_status "Installing packages with sudo..."
             sudo apt-get update
-            sudo apt-get install -y python3 python3-pip python3-venv cron mysql-client
+            sudo apt-get install -y python3 python3-pip python3-venv cron mariadb-client
         else
             apt-get update
-            apt-get install -y python3 python3-pip python3-venv cron mysql-client
+            apt-get install -y python3 python3-pip python3-venv cron mariadb-client
         fi
     elif command -v yum >/dev/null 2>&1; then
         if [[ $EUID -ne 0 ]]; then
