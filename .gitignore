@@ -1,48 +1,22 @@
 # Environment variables (contains sensitive database credentials)
 .env
 
-# Python
+# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+*.pyc
 
-# Virtual environments
-venv/
-env/
-ENV/
-
-# Logs
-logs/
-*.log
-
-# Backups
-*.backup.*
-*.failed.*
-
-# IDE
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp

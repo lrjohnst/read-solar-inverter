@@ -165,7 +165,7 @@ def create_tables(config):
     return True
 
 
-def create_env_file(config):
+def create_env_file(config, app_dir=None):
     """Create .env file with database configuration"""
     env_content = f"""# Solar Inverter Data Collector Configuration
 SOLAR_XML_ENDPOINT=http://192.168.1.50/real_time_data.xml
@@ -177,10 +177,15 @@ REQUEST_TIMEOUT=10
 LOG_LEVEL=INFO
 """
 
+    # Determine where to create the .env file
+    env_file_path = '.env'
+    if app_dir:
+        env_file_path = os.path.join(app_dir, '.env')
+
     try:
-        with open('.env', 'w') as f:
+        with open(env_file_path, 'w') as f:
             f.write(env_content)
-        print("Created .env file with configuration")
+        print(f"Created .env file with configuration at: {env_file_path}")
         return True
     except Exception as e:
         print(f"Error creating .env file: {e}")
@@ -191,6 +196,19 @@ def main():
     """Main setup function"""
     print("=== Solar Inverter Database Setup ===")
     print()
+
+    # Try to determine the application directory
+    app_dir = None
+
+    # Check if we're running from the installation directory
+    if os.path.exists('collect_solar_data.py') and os.path.exists('venv'):
+        app_dir = os.getcwd()
+        print(f"Detected installation directory: {app_dir}")
+
+    # Check common installation paths
+    elif os.path.exists(os.path.expanduser('~/solar-inverter/collect_solar_data.py')):
+        app_dir = os.path.expanduser('~/solar-inverter')
+        print(f"Found installation directory: {app_dir}")
 
     config = get_db_config()
 
@@ -203,13 +221,15 @@ def main():
         sys.exit(1)
 
     print("\nCreating configuration file...")
-    if not create_env_file(config):
+    if not create_env_file(config, app_dir):
         print("Warning: Could not create .env file")
 
     print("\n=== Setup Complete ===")
     print(f"Database: {config['database']}")
     print(f"User: {config['app_user']}")
     print(f"Host: {config['host']}")
+    if app_dir:
+        print(f"Configuration file: {app_dir}/.env")
     print("\nYou can now run the data collector script!")
 
 
