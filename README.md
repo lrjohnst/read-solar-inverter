@@ -1,24 +1,25 @@
 # Solar Inverter Data Collector
 
-A Python-based system for collecting real-time data from solar inverters and storing it in a MySQL database. This system is designed to run on Linux machines and automatically collects data every minute, creating a comprehensive time-series dataset of your solar inverter's performance.
+A Python-based system for collecting real-time data from solar inverters and storing it in a MySQL database. This system runs entirely in user space and automatically collects data every minute, creating a comprehensive time-series dataset of your solar inverter's performance.
 
 ## Features
 
 - **Real-time Data Collection**: Fetches XML data from your solar inverter every minute
 - **MySQL Storage**: Stores all data in a structured MySQL database for analysis
-- **Automatic Monitoring**: Runs as a systemd service with automatic restarts
-- **Comprehensive Logging**: Tracks collection success/failure with detailed logs
-- **Easy Deployment**: GitHub Actions integration for automatic deployments
+- **User-Space Installation**: Runs as your user, no root privileges required for operation
+- **Systemd User Services**: Automatic data collection via systemd user timer
+- **Easy Configuration**: Environment-based configuration with `.env` file
+- **Simple Deployment**: Git-based deployment with automatic updates
 - **Monitoring Tools**: Built-in status monitoring and statistics
-- **Error Handling**: Robust error handling with retry logic
+- **Error Handling**: Robust error handling with detailed logging
 
 ## System Requirements
 
-- Linux server (Ubuntu 18.04+ recommended)
+- Linux server (Raspberry Pi OS, Ubuntu 18.04+ recommended)
 - Python 3.6+
-- MySQL 5.7+ or MariaDB 10.3+
+- MySQL 5.7+ or MariaDB 10.3+ (can be remote)
 - Network access to your solar inverter
-- Root/sudo access for installation
+- Git for deployment updates
 
 ## Quick Start
 
@@ -33,54 +34,80 @@ cd read-solar-inverter
 
 ### 2. Run Installation
 
-Make the installation script executable and run it:
+Make the installation script executable and run it (do NOT use sudo):
 
 ```bash
 chmod +x install.sh
-sudo ./install.sh
+./install.sh
 ```
 
 The installation script will:
-- Install system dependencies (Python, MySQL client, cron)
-- Create a dedicated system user (`solar`)
-- Set up the application in `/opt/solar-inverter/`
-- Create a Python virtual environment
-- Install Python dependencies
-- Configure systemd service and timer
-- Set up log rotation
+- Install system dependencies (Python, MariaDB client) using sudo when needed
+- Set up the application in `~/solar-inverter/`
+- Create a Python virtual environment with isolated dependencies
+- Install Python dependencies (requests, mysql-connector-python, python-dotenv)
+- Configure systemd user service and timer
+- Set up log rotation via cron
 - Guide you through database configuration
+- Create `.env` file with your settings
 
-### 3. Configure Database
+**Note**: The script may prompt for your sudo password to install system packages, but the application itself runs as your user.
 
-During installation, you'll be prompted to configure the MySQL database connection. You'll need:
-- MySQL server host (your remote MySQL server)
-- MySQL root credentials (for initial setup)
-- Desired application database name
-- Application database user credentials
+### 3. Configure Your Environment
 
-### 4. Verify Installation
+After installation, you may need to update the configuration:
+
+```bash
+# Edit the configuration file
+nano ~/solar-inverter/.env
+```
+
+Update these settings for your setup:
+```env
+SOLAR_XML_ENDPOINT=http://192.168.2.21/real_time_data.xml  # Your inverter IP
+DB_HOST=your-mysql-server.com  # Your remote MySQL server
+DB_USER=solar_user
+DB_PASSWORD=your_password
+DB_NAME=solar_inverter
+```
+
+### 4. Enable Auto-Start After Reboot
+
+To ensure the service starts after server reboots:
+
+```bash
+sudo loginctl enable-linger $USER
+```
+
+### 5. Verify Installation
 
 Check if the service is running:
 
 ```bash
-sudo systemctl status solar-inverter-collector.timer
+systemctl --user status solar-inverter-collector.timer
 ```
 
-Monitor the logs:
+Or use the monitoring script:
 
 ```bash
-sudo journalctl -u solar-inverter-collector.service -f
+~/solar-inverter/monitor.sh status
+```
+
+Test manual data collection:
+
+```bash
+~/solar-inverter/venv/bin/python ~/solar-inverter/collect_solar_data.py
 ```
 
 ## Configuration
 
 ### Environment Variables
 
-The system uses environment variables for configuration. These are stored in `/opt/solar-inverter/.env`:
+The system uses environment variables for configuration. These are stored in `~/solar-inverter/.env`:
 
 ```bash
-SOLAR_XML_ENDPOINT=http://192.168.1.50/real_time_data.xml
-DB_HOST=your-mysql-server.com
+SOLAR_XML_ENDPOINT=http://192.168.2.21/real_time_data.xml  # Your inverter endpoint
+DB_HOST=your-mysql-server.com  # Your remote MySQL server
 DB_USER=solar_user
 DB_PASSWORD=your_password
 DB_NAME=solar_inverter
@@ -88,9 +115,29 @@ REQUEST_TIMEOUT=10
 LOG_LEVEL=INFO
 ```
 
-### XML Endpoint
+### Updating Configuration
 
-Update the `SOLAR_XML_ENDPOINT` in your `.env` file to match your inverter's IP address and path.
+You can edit the configuration at any time:
+
+```bash
+nano ~/solar-inverter/.env
+```
+
+Changes take effect on the next data collection cycle (within a minute) or restart the service:
+
+```bash
+systemctl --user restart solar-inverter-collector.timer
+```
+
+### Finding Your Inverter Endpoint
+
+Test if you can reach your inverter:
+
+```bash
+curl http://192.168.2.21/real_time_data.xml
+```
+
+This should return XML data similar to your inverter's real-time information.
 
 ## Database Schema
 
@@ -120,24 +167,24 @@ Use the built-in monitoring script:
 
 ```bash
 # Check service status
-sudo /opt/solar-inverter/monitor.sh status
+~/solar-inverter/monitor.sh status
 
 # View recent logs
-sudo /opt/solar-inverter/monitor.sh logs
+~/solar-inverter/monitor.sh logs
 
 # Follow logs in real-time
-sudo /opt/solar-inverter/monitor.sh follow
+~/solar-inverter/monitor.sh follow
 
 # View collection statistics
-sudo /opt/solar-inverter/monitor.sh stats
+~/solar-inverter/monitor.sh stats
 
 # Test data collection
-sudo /opt/solar-inverter/monitor.sh test
+~/solar-inverter/monitor.sh test
 
 # Start/stop/restart service
-sudo /opt/solar-inverter/monitor.sh start
-sudo /opt/solar-inverter/monitor.sh stop
-sudo /opt/solar-inverter/monitor.sh restart
+~/solar-inverter/monitor.sh start
+~/solar-inverter/monitor.sh stop
+~/solar-inverter/monitor.sh restart
 ```
 
 ### Manual Data Collection
@@ -145,71 +192,76 @@ sudo /opt/solar-inverter/monitor.sh restart
 You can run data collection manually for testing:
 
 ```bash
-sudo -u solar /opt/solar-inverter/venv/bin/python /opt/solar-inverter/collect_solar_data.py
+~/solar-inverter/venv/bin/python ~/solar-inverter/collect_solar_data.py
 ```
 
 ### Service Management
 
-Standard systemd commands:
+User systemd commands:
 
 ```bash
 # Check timer status
-sudo systemctl status solar-inverter-collector.timer
+systemctl --user status solar-inverter-collector.timer
 
 # Check service status
-sudo systemctl status solar-inverter-collector.service
+systemctl --user status solar-inverter-collector.service
 
 # View logs
-sudo journalctl -u solar-inverter-collector.service -f
+journalctl --user -u solar-inverter-collector.service -f
 
 # Start/stop timer
-sudo systemctl start solar-inverter-collector.timer
-sudo systemctl stop solar-inverter-collector.timer
+systemctl --user start solar-inverter-collector.timer
+systemctl --user stop solar-inverter-collector.timer
 
 # Enable/disable automatic startup
-sudo systemctl enable solar-inverter-collector.timer
-sudo systemctl disable solar-inverter-collector.timer
+systemctl --user enable solar-inverter-collector.timer
+systemctl --user disable solar-inverter-collector.timer
 ```
 
-## Automated Deployment
+## Easy Updates and Deployment
 
-### GitHub Actions Setup
+### Simple Git-Based Updates
 
-This repository includes GitHub Actions for automated deployment. To set it up:
-
-1. **Add Repository Secrets** in your GitHub repository settings:
-   - `PROD_HOST`: Your production server IP/hostname
-   - `PROD_USER`: SSH username on production server
-   - `PROD_SSH_KEY`: Private SSH key for authentication
-   - `PROD_PORT`: SSH port (optional, defaults to 22)
-
-2. **Set up SSH Key Authentication** on your production server:
-   ```bash
-   # On your local machine, generate a key pair
-   ssh-keygen -t rsa -b 4096 -C "github-deploy"
-
-   # Copy public key to production server
-   ssh-copy-id -i ~/.ssh/id_rsa.pub user@your-server.com
-
-   # Add the private key to GitHub secrets as PROD_SSH_KEY
-   ```
-
-3. **Automatic Deployment**: Pushes to the `main` branch will automatically deploy to production
-
-### Manual Deployment
-
-For manual deployments, use the deployment script:
+The easiest way to update your installation:
 
 ```bash
-# Initial setup on production server
-sudo ./deploy.sh setup
+cd ~/Documenten/read-solar-inverter  # Your repository directory
+git pull                             # Get latest changes
+./deploy.sh update                   # Deploy to ~/solar-inverter
+```
+
+This approach:
+- Uses HTTPS (no SSH keys needed)
+- Automatically stops service, updates files, restarts service
+- Creates automatic backups
+- Tests the deployment
+
+### Manual Deployment Options
+
+```bash
+# From your repository directory
+cd ~/Documenten/read-solar-inverter
 
 # Update to latest version
-sudo ./deploy.sh update
+./deploy.sh update
 
-# Rollback to previous version
-sudo ./deploy.sh rollback
+# Rollback to previous version (if something goes wrong)
+./deploy.sh rollback
 ```
+
+### GitHub Actions Setup (Optional)
+
+For fully automated deployments, you can set up GitHub Actions:
+
+1. **Add Repository Secrets** in your GitHub repository settings:
+   - `PROD_HOST`: Your server IP/hostname
+   - `PROD_USER`: SSH username
+   - `PROD_SSH_KEY`: Private SSH key
+   - `PROD_PORT`: SSH port (optional, defaults to 22)
+
+2. **Automatic Deployment**: Pushes to `main` branch will auto-deploy
+
+**Note**: Most users prefer the simple `git pull && ./deploy.sh update` approach.
 
 ## Data Analysis
 
@@ -259,29 +311,37 @@ ORDER BY date DESC;
 
 1. **Service not starting**:
    ```bash
-   sudo journalctl -u solar-inverter-collector.service -f
+   journalctl --user -u solar-inverter-collector.service -f
+   # or
+   ~/solar-inverter/monitor.sh logs
    ```
 
 2. **Database connection errors**:
    - Check MySQL server connectivity
-   - Verify credentials in `.env` file
-   - Check MySQL server logs
+   - Verify credentials in `~/solar-inverter/.env` file
+   - Test connection manually: `~/solar-inverter/venv/bin/python ~/solar-inverter/collect_solar_data.py`
 
 3. **XML endpoint not accessible**:
    - Verify network connectivity to inverter
-   - Check inverter IP address
-   - Test with curl: `curl http://192.168.1.50/real_time_data.xml`
+   - Check inverter IP address in `~/solar-inverter/.env`
+   - Test with curl: `curl http://192.168.2.21/real_time_data.xml`
 
-4. **Permission issues**:
+4. **Configuration not loading**:
+   - Ensure `.env` file exists: `ls -la ~/solar-inverter/.env`
+   - Check file contents: `cat ~/solar-inverter/.env`
+   - The script uses `python-dotenv` to load environment variables
+
+5. **Service not starting after reboot**:
    ```bash
-   sudo chown -R solar:solar /opt/solar-inverter/
+   # Enable lingering for your user
+   sudo loginctl enable-linger $USER
    ```
 
 ### Log Locations
 
-- Service logs: `journalctl -u solar-inverter-collector.service`
-- Application logs: `/var/log/syslog` (search for 'solar-collector')
-- Deployment logs: GitHub Actions logs in repository
+- Service logs: `journalctl --user -u solar-inverter-collector.service`
+- Monitor script: `~/solar-inverter/monitor.sh logs`
+- Manual test: `~/solar-inverter/venv/bin/python ~/solar-inverter/collect_solar_data.py`
 
 ## Data Backup
 
@@ -302,11 +362,33 @@ chmod +x /etc/cron.daily/solar-backup
 
 ## Security Considerations
 
-- The application runs as a dedicated `solar` user with minimal privileges
-- Database credentials are stored in environment variables
-- SSH keys are used for deployment authentication
-- Log rotation prevents disk space issues
+- The application runs as your user account with minimal system impact
+- Database credentials are stored in environment variables (`.env` file)
+- The `.env` file is excluded from version control via `.gitignore`
+- Uses Python virtual environment for dependency isolation
+- HTTPS-based git updates (no SSH keys required)
 - Regular security updates should be applied to the host system
+
+## File Structure
+
+After installation, your system will have:
+
+```
+~/solar-inverter/              # Installation directory
+├── collect_solar_data.py      # Main data collection script
+├── setup_database.py          # Database setup utility
+├── monitor.sh                 # Monitoring and management script
+├── requirements.txt           # Python dependencies
+├── .env                       # Configuration (not in git)
+├── venv/                      # Python virtual environment
+└── logs/                      # Application logs (if created)
+
+~/Documenten/read-solar-inverter/  # Repository directory
+├── All source files           # Your cloned repository
+└── .git/                      # Git repository data
+```
+
+**Note**: Always run updates from the repository directory, not the installation directory.
 
 ## Contributing
 
@@ -329,4 +411,30 @@ For issues and questions:
 
 ---
 
-**Note**: Update the repository URL in `deploy.sh` and GitHub Actions workflow with your actual repository URL before using the automated deployment features.
+## Summary of Key Changes
+
+This system has been designed for **simplicity and user-friendliness**:
+
+- ✅ **No root required**: Runs entirely in user space
+- ✅ **Simple installation**: One script, no complex setup
+- ✅ **Easy updates**: `git pull && ./deploy.sh update`
+- ✅ **Clean removal**: `rm -rf ~/solar-inverter` removes everything
+- ✅ **No system pollution**: Virtual environment keeps dependencies isolated
+- ✅ **Raspberry Pi ready**: Works great on Raspberry Pi OS
+
+**Quick Commands Reference**:
+```bash
+# Check status
+~/solar-inverter/monitor.sh status
+
+# View logs
+~/solar-inverter/monitor.sh logs
+
+# Update system
+cd ~/Documenten/read-solar-inverter && git pull && ./deploy.sh update
+
+# Test manually
+~/solar-inverter/venv/bin/python ~/solar-inverter/collect_solar_data.py
+```
+
+**Note**: Update the repository URL in `deploy.sh` with your actual repository URL if using automated deployments.
